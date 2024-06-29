@@ -11,13 +11,14 @@ let fhemname=ts[1]+'.'+ts[2];
 //node.warn(`new state:${fhemname}:${newstate}`);
 
 // save state
-let states=global.get('rollstate');
+let states=global.get('rollsstate');
 let moved=global.get('rollmoved');
-states[fhemname]=newstate;
+states[fhemname].state=newstate;
 if(newstate=='down' || newstate=='up') {
     moved[fhemname]=newstate;
+    states[fhemname].moved=newstate;
 }
-global.set('rollstate', states);
+global.set('rollsstate', states);
 global.set('rollmoved', moved);
 
 //node.warn(`rollstate:${JSON.stringify(states)}`);
