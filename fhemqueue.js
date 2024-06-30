@@ -14,12 +14,12 @@ const upslot=3;
 msg.name=env.get('name');
 
 let fhemname;
-if(typeof msg.fhemname!=='undefined') fhemname=msg.fhemname;
-else                                  fhemname=env.get('fhemname');
+if(msg.fhemname !== undefined) fhemname=msg.fhemname;
+else                           fhemname=env.get('fhemname');
 if (!fhemname) return;
 msg.fhemname = fhemname;
 
-node.warn(`fhemqueue ${fhemname} topic:${msg.topic} pl:${msg.payload}`);
+//node.warn(`fhemqueue ${fhemname} topic:${msg.topic} pl:${msg.payload}`);
 fhemqueue_main();
 
 return;
@@ -34,11 +34,13 @@ function fhemqueue_main()
     if (   fhemname == "arb.rollTerr"
         || fhemname == "arb.rollWeg") { docheck=false; }
 
-    // neues Kommando-> evtl. schon vorhandenen up-timer löschen
-    let timid=context.get('timid_up'); clearTimeout(timid);
+    // neues Kommando-> evtl. schon vorhandene timer löschen
+    //let timid=context.get('timid_up'); clearTimeout(timid);
     let states=global.get('rollsstate');
     if (typeof states[fhemname] !== 'object') states[fhemname] = {};
+    //let timid=context.get('timid_up'); clearTimeout(timid);
 	clearTimeout(states[fhemname].chk_tim); // neues Kommando->altes Weg
+    clearTimeout(states[fhemname].up_tim);
     states[fhemname].chk_tim = null;
 	global.set('rollsstate', states);
 
@@ -54,8 +56,7 @@ function fhemqueue_main()
 
 function trySend(msg)
 {
-    node.warn(`ttrysend q`);
-    // in Queue eintragen.
+    // msg in Queue eintragen.
     enocean_queue=global.get('enocean_queue')
     enocean_queue.push(msg);
     global.set('enocean_queue', enocean_queue);
@@ -90,63 +91,62 @@ function enocean_send_timer() {
 function enocean_send(msg) {
     let plup = '';
     const fhemname=msg['fhemname'];
-    // fhem payload erstellen
-    let pl=`set ${fhemname}`;
-    node.warn(`es eno_send ${fhemname} pl:${msg.payload}`);
-    if      (msg.topic==='stop') pl+=' stop';
-    else if (msg.topic==='fhem') pl = msg.payload; // ist schon ein fhem-Kommando
-    else if (msg.payload<=0)     pl+=' closes';
-    else if (msg.payload>=100)   pl+=' opens';
-    else if (msg.payload<100)  { // Beschattung
-        node.warn("es    pl=up");
-        plup=pl+` up ${tup}`;
-        pl+=' closes';
-    } else {
-		node.error(`es   Payload illegal ${msg.payload}`);
-		return;
-    }
-    msg.payload = pl;
-    msg.topic = 'fhem'; // payload ist jetzt ein fhem-kommando
-
+	if (msg.topic!=='fhem') { // FHEM Kommando ?
+		// nein: fhem payload erstellen
+		let pl=`set ${fhemname}`;
+		node.warn(`es eno_send ${fhemname} pl:${msg.payload}`);
+		if      (msg.topic==='stop') pl+=' stop';
+		else if (msg.payload<=0)     pl+=' closes';
+		else if (msg.payload>=100)   pl+=' opens';
+		else if (msg.payload<100)  { // Beschattung
+			node.warn("es    pl=up");
+			plup=pl+` up ${tup}`;
+			pl+=' closes';
+		} else {
+			node.error(`es   Payload illegal ${msg.payload}`);
+			return;
+		}
+		msg.payload = pl;
+		msg.topic = 'fhem'; // payload ist jetzt ein fhem-kommando
+	}
+    let states=global.get('rollsstate');
+    if (typeof states[fhemname] !== 'object') states[fhemname] = {};
     if(msg.check) { // timer zum prüfen der Änderung des states starten
         msg.check = false; // beim Wiederholen kein neuer check-Timer
         msg.repeat = 0;
-        let states=global.get('rollsstate');
-        if (typeof states[fhemname] !== 'object') states[fhemname] = {};
 		clearTimeout(states[fhemname].chk_tim); // falls da schon ein timer läuft
-		states[fhemname].chk_tim=1234;
-		node.warn(`test:${states[fhemname].chk_tim}`)
         states[fhemname].chk_tim = setTimeout(()=>{ check_state(msg) }, check_timeout_ms);
-        node.warn(`es    check tim:${states[fhemname].chk_tim}`);
+        //node.warn(`es    check tim:${states[fhemname].chk_tim}`);
         states[fhemname].moved = "no";
-        global.set('rollsstate', states);
     }
     node.send(msg);
-    node.warn(`es    roll eo-sent pl:${msg.payload}`);
+    node.warn(`es    sent pl:${msg.payload}`);
 
     if (plup!='') { // wieder hochfahren für Schlitz
         node.warn(`es    plup: ${plup}`)
-        let msgup = Object.assign({}, msg);
+        let msgup = Object.assign({}, msg); // kopieren
         msgup.check = false;
         msgup.payload = plup;
-        msgup.topic = 'fhem';
-        let timid=setTimeout(()=>{ trySend(msgup); node.warn(`es    plup ${msgup.fhemname}`);}, tw);
-        context.set('timid_up', timid);
+		//let timid=context.get('timid_up');
+		clearTimeout(states[fhemname].up_tim);
+        states[fhemname].up_tim = setTimeout(()=>{ trySend(msgup); node.warn(`es    plup ${msgup.fhemname}`);}, tw);
+        //context.set('timid_up', timid);
     }
+    global.set('rollsstate', states);
 }
 
 function check_state(msg) {
     const fhemname=msg['fhemname'];
-    //let moved=global.get('rollmoved');
     let states=global.get('rollsstate');
     if (typeof states[fhemname] !== 'object') states[fhemname] = {};
+
     node.warn(`cs checkstate: ${fhemname} mv:${states[fhemname].moved}`);
     if(states[fhemname].moved=="no") {
         msg.repeat+=1;
         node.warn(`repeat: ${fhemname} ${msg.repeat}`);
         if(msg.repeat<=3) {
 	        enocean_send(msg);
-            // timer zum prüfen der Änderung states erneut starten
+            // timer zum prüfen der Änderung des states erneut starten
 	        clearTimeout(states[fhemname].chk_tim); // sicher ist sicher
             states[fhemname].chk_tim = setTimeout(()=>{ check_state(msg) }, check_timeout_ms);
             node.warn(`cs    roll repeated ${msg.payload}`);
