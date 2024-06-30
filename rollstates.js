@@ -12,23 +12,20 @@ let fhemname=ts[1]+'.'+ts[2];
 
 // save state
 let states=global.get('rollsstate');
-let moved=global.get('rollmoved');
+if (typeof states[fhemname] !== 'object') states[fhemname] = {};
+
 states[fhemname].state=newstate;
 if(newstate=='down' || newstate=='up') {
-    moved[fhemname]=newstate;
     states[fhemname].moved=newstate;
 }
-global.set('rollsstate', states);
-global.set('rollmoved', moved);
 
-//node.warn(`rollstate:${JSON.stringify(states)}`);
-//node.warn(`moved:${JSON.stringify(moved)}`);
+global.set('rollsstate', states);
 
 // Rolladen Terr-Rechts offen lassen, wenn Markise runter
 // closed down stop
 if(fhemname=='Markise') {
-    const markise_offen = newstate == 'open' 
-                       || newstate == 'open_ack' 
+    const markise_offen = newstate == 'open'
+                       || newstate == 'open_ack'
                        || newstate == 'up';
     node.warn(`markise offen ${markise_offen}`);
     flow.set('markise_offen', markise_offen);
