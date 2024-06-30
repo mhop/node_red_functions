@@ -2,7 +2,9 @@
 //      payload: 0-geschlossen, 100-offen, 1-99-schlitz
 //      topic: 'delayed'-Einqueuen und Wartezeit,
 //             'stop':anhalten,
+//             'fhem': payload ist fhem kommando 
 //             sonst-sofort senden
+//      check: prüfen und wiederholen, wenn nicht gefahren
 
 const tup=env.get('tup'); // Zeit hochfahren Schlitz sek
 const tw =env.get('twait')*1000; // Zeit Runter abwarten msek
@@ -122,7 +124,7 @@ function enocean_send(msg) {
     node.send(msg);
     node.warn(`es    sent pl:${msg.payload}`);
 
-    if (plup!='') { // wieder hochfahren für Schlitz
+    if (plup!='') { // wieder ein Stück hochfahren für Schlitz
         node.warn(`es    plup: ${plup}`)
         let msgup = Object.assign({}, msg); // kopieren
         msgup.check = false;
@@ -141,7 +143,7 @@ function check_state(msg) {
     if (typeof states[fhemname] !== 'object') states[fhemname] = {};
 
     node.warn(`cs checkstate: ${fhemname} mv:${states[fhemname].moved}`);
-    if(states[fhemname].moved=="no") {
+    if(states[fhemname].moved=="no") { // Rollladen ist nicht gefahren
         msg.repeat+=1;
         node.warn(`repeat: ${fhemname} ${msg.repeat}`);
         if(msg.repeat<=3) {
